@@ -1,0 +1,244 @@
+package com.im.service.impl;
+
+import cn.hutool.core.util.IdUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.im.constant.Constants;
+import com.im.dto.SendMessageDTO;
+import com.im.entity.Message;
+import com.im.exception.BusinessException;
+import com.im.mapper.MessageMapper;
+import com.im.result.Result;
+import com.im.service.MessageService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 消息服务实现
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> implements MessageService {
+
+    private final MessageMapper messageMapper;
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result<Message> sendMessage(Long fromId, SendMessageDTO dto) {
+        // 参数校验
+        if (dto.getToId() == null && dto.getGroupId() == null) {
+            throw new BusinessException("接收者或群组不能为空");
+        }
+
+        // 生成消息 ID
+        String msgId = IdUtil.fastSimpleUUID();
+
+        // 创建消息
+        Message message = new Message();
+        message.setMsgId(msgId);
+        message.setFromId(fromId);
+        message.setToId(dto.getToId());
+        message.setGroupId(dto.getGroupId());
+        message.setType(dto.getType());
+        message.setContent(dto.getContent());
+        message.setExtra(dto.getExtra());
+        message.setStatus(Constants.MSG_STATUS_NORMAL);
+        message.setIsRead(0);
+        message.setReadCount(0);
+        message.setDeliveryStatus("sent");
+
+        // 获取表名（分表）
+        String tableName = getTableName(fromId);
+
+        // 插入消息（使用动态表名需要自定义 SQL）
+        // 这里简化处理，使用默认表
+        baseMapper.insert(message);
+
+        // 更新会话
+        updateConversation(fromId, dto.getToId(), dto.getGroupId(), message);
+
+        // TODO: 通过 WebSocket 推送消息
+        // websocketService.sendMessage(message);
+
+        // 如果是群消息，更新已读状态
+        if (dto.getGroupId() != null) {
+            message.setIsRead(1); // 发送者自己的消息标记为已读
+        }
+
+        log.info("发送消息成功：msgId={}, fromId={}, toId={}, groupId={}", 
+                msgId, fromId, dto.getToId(), dto.getGroupId());
+
+        return Result.success(message);
+    }
+
+    @Override
+    public Result<Page<Message>> getMessageList(Long userId, Long targetId, Long groupId, 
+                                                 Integer pageNum, Integer pageSize) {
+        Page<Message> page = new Page<>(pageNum, pageSize);
+        String tableName = getTableName(userId);
+
+        IPage<Message> result;
+        if (groupId != null) {
+            // 群聊消息
+            result = messageMapper.selectGroupMessages(page, tableName, groupId);
+        } else if (targetId != null) {
+            // 单聊消息
+            result = messageMapper.selectSingleChatMessages(page, tableName, userId, targetId);
+        } else {
+            throw new BusinessException("参数错误");
+        }
+
+        Page<Message> resultPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        resultPage.setRecords(result.getRecords());
+
+        return Result.success(resultPage);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result<Void> revokeMessage(Long userId, String msgId) {
+        // 查询消息
+        Message message = findMessageByMsgId(msgId);
+        if (message == null) {
+            throw new BusinessException("消息不存在");
+        }
+
+        // 只有发送者可以撤回
+        if (!message.getFromId().equals(userId)) {
+            throw new BusinessException("只能撤回自己的消息");
+        }
+
+        // 检查撤回时间（2 分钟内）
+        LocalDateTime now = LocalDateTime.now();
+        long minutes = java.time.Duration.between(message.getCreatedAt(), now).toMinutes();
+        if (minutes > 2) {
+            throw new BusinessException("超过 2 分钟的消息不能撤回");
+        }
+
+        // 更新消息状态
+        message.setStatus(Constants.MSG_STATUS_REVOKED);
+        baseMapper.updateById(message);
+
+        log.info("撤回消息：msgId={}, userId={}", msgId, userId);
+        return Result.success();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result<Void> deleteMessage(Long userId, String msgId) {
+        // 查询消息
+        Message message = findMessageByMsgId(msgId);
+        if (message == null) {
+            throw new BusinessException("消息不存在");
+        }
+
+        // 只有发送者可以删除（或者实现双向删除）
+        if (!message.getFromId().equals(userId) && !message.getToId().equals(userId)) {
+            throw new BusinessException("无权限删除该消息");
+        }
+
+        // 更新消息状态
+        message.setStatus(Constants.MSG_STATUS_DELETED);
+        baseMapper.updateById(message);
+
+        log.info("删除消息：msgId={}, userId={}", msgId, userId);
+        return Result.success();
+    }
+
+    @Override
+    public Result<Void> markAsRead(Long userId, Long targetId, Long groupId) {
+        // TODO: 标记消息已读
+        // 更新未读计数
+        String key = Constants.REDIS_KEY_MSG_UNREAD + userId;
+        if (targetId != null) {
+            redisTemplate.opsForHash().delete(key, targetId.toString());
+        }
+        return Result.success();
+    }
+
+    @Override
+    public Result<Integer> getUnreadCount(Long userId) {
+        String key = Constants.REDIS_KEY_MSG_UNREAD + userId;
+        Object count = redisTemplate.opsForValue().get(key);
+        int unreadCount = count instanceof Integer ? (Integer) count : 0;
+        return Result.success(unreadCount);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result<Void> forwardMessage(Long userId, String msgId, List<Long> targetIds, List<Long> groupIds) {
+        // 查询原消息
+        Message originalMessage = findMessageByMsgId(msgId);
+        if (originalMessage == null) {
+            throw new BusinessException("消息不存在");
+        }
+
+        // 转发给好友
+        if (targetIds != null) {
+            for (Long targetId : targetIds) {
+                SendMessageDTO dto = new SendMessageDTO();
+                dto.setToId(targetId);
+                dto.setType(originalMessage.getType());
+                dto.setContent(originalMessage.getContent());
+                dto.setExtra(originalMessage.getExtra());
+                sendMessage(userId, dto);
+            }
+        }
+
+        // 转发到群组
+        if (groupIds != null) {
+            for (Long groupId : groupIds) {
+                SendMessageDTO dto = new SendMessageDTO();
+                dto.setGroupId(groupId);
+                dto.setType(originalMessage.getType());
+                dto.setContent(originalMessage.getContent());
+                dto.setExtra(originalMessage.getExtra());
+                sendMessage(userId, dto);
+            }
+        }
+
+        log.info("转发消息：msgId={}, targetIds={}, groupIds={}", msgId, targetIds, groupIds);
+        return Result.success();
+    }
+
+    /**
+     * 获取表名（分表路由）
+     */
+    private String getTableName(Long userId) {
+        int suffix = Math.abs(userId.hashCode() % 100);
+        return String.format("im_message_%02d", suffix);
+    }
+
+    /**
+     * 根据消息 ID 查找消息
+     */
+    private Message findMessageByMsgId(String msgId) {
+        // 简化处理，遍历所有分表查询
+        for (int i = 0; i < 100; i++) {
+            String tableName = String.format("im_message_%02d", i);
+            Message message = messageMapper.selectByMsgId(tableName, msgId);
+            if (message != null) {
+                return message;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 更新会话
+     */
+    private void updateConversation(Long fromId, Long toId, Long groupId, Message message) {
+        // TODO: 实现会话表更新
+        // 这里简化处理
+    }
+}
