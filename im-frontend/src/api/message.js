@@ -41,3 +41,10 @@ export function markAsRead(params) {
 export function getUnreadCount() {
   return get('/message/unread')
 }
+
+/**
+ * 搜索聊天记录
+ */
+export function searchMessages(params) {
+  return get('/message/search', params)
+}

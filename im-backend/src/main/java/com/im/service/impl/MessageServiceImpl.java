@@ -241,4 +241,74 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         // TODO: 实现会话表更新
         // 这里简化处理
     }
+
+    @Override
+    public Result<Page<Message>> searchMessages(Long userId, String keyword, String conversationId,
+                                                 String startTime, String endTime,
+                                                 Integer pageNum, Integer pageSize) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return Result.success(new Page<>(pageNum, pageSize));
+        }
+
+        Page<Message> page = new Page<>(pageNum, pageSize);
+        String tableName = getTableName(userId);
+
+        // 构建查询条件
+        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
+        
+        // 关键词搜索（支持全文搜索的数据库可以使用 MATCH AGAINST）
+        wrapper.like(Message::getContent, keyword.trim());
+        
+        // 会话过滤
+        if (conversationId != null && !conversationId.isEmpty()) {
+            // 判断是用户 ID 还是群 ID
+            try {
+                Long convId = Long.parseLong(conversationId);
+                wrapper.and(w -> w.eq(Message::getToId, convId)
+                                 .or()
+                                 .eq(Message::getGroupId, convId)
+                                 .or()
+                                 .eq(Message::getFromId, convId));
+            } catch (NumberFormatException e) {
+                // 不是数字，忽略
+            }
+        } else {
+            // 没有指定会话，搜索所有相关消息
+            wrapper.and(w -> w.eq(Message::getFromId, userId)
+                             .or()
+                             .eq(Message::getToId, userId));
+        }
+
+        // 时间范围过滤
+        if (startTime != null && !startTime.isEmpty()) {
+            try {
+                LocalDateTime start = LocalDateTime.parse(startTime);
+                wrapper.ge(Message::getCreatedAt, start);
+            } catch (Exception e) {
+                log.warn("开始时间格式错误：{}", startTime);
+            }
+        }
+
+        if (endTime != null && !endTime.isEmpty()) {
+            try {
+                LocalDateTime end = LocalDateTime.parse(endTime);
+                wrapper.le(Message::getCreatedAt, end);
+            } catch (Exception e) {
+                log.warn("结束时间格式错误：{}", endTime);
+            }
+        }
+
+        // 只查询正常状态的消息
+        wrapper.eq(Message::getStatus, Constants.MSG_STATUS_NORMAL);
+
+        // 按时间倒序
+        wrapper.orderByDesc(Message::getCreatedAt);
+
+        Page<Message> result = this.page(page, wrapper);
+
+        log.info("搜索消息：keyword={}, conversationId={}, resultCount={}", 
+                keyword, conversationId, result.getRecords().size());
+
+        return Result.success(result);
+    }
 }

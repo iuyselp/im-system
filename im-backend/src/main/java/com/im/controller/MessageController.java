@@ -83,4 +83,18 @@ public class MessageController {
             @RequestParam(required = false) List<Long> groupIds) {
         return messageService.forwardMessage(userId, msgId, targetIds, groupIds);
     }
+
+    @GetMapping("/search")
+    @ApiOperation("搜索聊天记录")
+    public Result<Page<Message>> searchMessages(
+            @RequestAttribute("userId") Long userId,
+            @RequestParam String keyword,
+            @RequestParam(required = false) String conversationId,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime,
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return messageService.searchMessages(userId, keyword, conversationId, 
+                                            startTime, endTime, pageNum, pageSize);
+    }
 }

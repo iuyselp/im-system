@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.im.mapper.MessageReadMapper">
+
+    <resultMap id="BaseResultMap" type="com.im.entity.MessageReadStatus">
+        <id column="id" property="id"/>
+        <result column="message_id" property="messageId"/>
+        <result column="user_id" property="userId"/>
+        <result column="read_at" property="readAt"/>
+    </resultMap>
+
+    <!-- 批量标记已读 -->
+    <insert id="batchMarkAsRead">
+        INSERT INTO im_message_read (message_id, user_id, read_at)
+        VALUES
+        <foreach collection="messageIds" item="messageId" separator=",">
+            (#{messageId}, #{userId}, NOW())
+        </foreach>
+        ON DUPLICATE KEY UPDATE read_at = VALUES(read_at)
+    </insert>
+
+    <!-- 获取消息的已读用户列表 -->
+    <select id="getReadUserIds" resultType="java.lang.Long">
+        SELECT user_id FROM im_message_read
+        WHERE message_id = #{messageId}
+        ORDER BY read_at ASC
+    </select>
+
+    <!-- 获取用户的未读消息数 -->
+    <select id="getUnreadCount" resultType="java.lang.Integer">
+        SELECT COUNT(DISTINCT m.msg_id)
+        FROM im_message_0 m
+        LEFT JOIN im_message_read mr ON m.msg_id = mr.message_id AND mr.user_id = #{userId}
+        WHERE (m.to_id = #{userId} OR m.group_id IN (
+            SELECT group_id FROM im_group_member WHERE user_id = #{userId}
+        ))
+        AND m.from_id != #{userId}
+        AND mr.id IS NULL
+        AND m.status = 1
+        <if test="conversationId != null and conversationId != ''">
+            AND (
+                (m.to_id = #{userId} AND m.from_id = #{conversationId})
+                OR (m.group_id = #{conversationId})
+            )
+        </if>
+    </select>
+
+</mapper>

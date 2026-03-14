@@ -47,4 +47,20 @@ public interface MessageService extends IService<Message> {
      * 转发消息
      */
     Result<Void> forwardMessage(Long userId, String msgId, List<Long> targetIds, List<Long> groupIds);
+
+    /**
+     * 搜索聊天记录
+     * 
+     * @param userId 用户 ID
+     * @param keyword 搜索关键词
+     * @param conversationId 会话 ID（可选，用户 ID 或群 ID）
+     * @param startTime 开始时间（可选）
+     * @param endTime 结束时间（可选）
+     * @param pageNum 页码
+     * @param pageSize 每页数量
+     * @return 搜索结果
+     */
+    Result<Page<Message>> searchMessages(Long userId, String keyword, String conversationId,
+                                         String startTime, String endTime,
+                                         Integer pageNum, Integer pageSize);
 }

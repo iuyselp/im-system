@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.im.mapper.CallRecordMapper">
+
+    <resultMap id="BaseResultMap" type="com.im.entity.CallRecord">
+        <id column="id" property="id"/>
+        <result column="call_id" property="callId"/>
+        <result column="caller_id" property="callerId"/>
+        <result column="receiver_id" property="receiverId"/>
+        <result column="group_id" property="groupId"/>
+        <result column="type" property="type"/>
+        <result column="duration" property="duration"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <!-- 获取通话历史 -->
+    <select id="getCallHistory" resultMap="BaseResultMap">
+        SELECT * FROM im_call_record
+        WHERE caller_id = #{userId} OR receiver_id = #{userId}
+        ORDER BY created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <!-- 获取未接来电数 -->
+    <select id="getMissedCallCount" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM im_call_record
+        WHERE receiver_id = #{userId}
+        AND status = 'MISSED'
+        AND created_at &gt; DATE_SUB(NOW(), INTERVAL 7 DAY)
+    </select>
+
+</mapper>
