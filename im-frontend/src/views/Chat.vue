@@ -522,11 +522,11 @@ onMounted(async () => {
   // 加载通话记录
   await loadRecentCalls()
   
-  // 初始化通话 store 的 WebSocket 监听
-  callStore.init()
-  
   // 连接 WebSocket
   wsManager.connect()
+  
+  // 初始化通话 store 的 WebSocket 监听
+  callStore.init()
   
   // 监听新消息
   wsMessageDisconnect = wsManager.on(WsMessageType.NEW_MESSAGE, handleNewMessage)

@@ -31,6 +31,7 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
 
     private final MessageMapper messageMapper;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final com.im.websocket.WebSocketHandler webSocketHandler;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -67,8 +68,8 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         // 更新会话
         updateConversation(fromId, dto.getToId(), dto.getGroupId(), message);
 
-        // TODO: 通过 WebSocket 推送消息
-        // websocketService.sendMessage(message);
+        // 通过 WebSocket 推送消息给接收方
+        pushMessageToReceiver(message);
 
         // 如果是群消息，更新已读状态
         if (dto.getGroupId() != null) {
@@ -79,6 +80,29 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
                 msgId, fromId, dto.getToId(), dto.getGroupId());
 
         return Result.success(message);
+    }
+
+    /**
+     * 推送消息给接收方
+     */
+    private void pushMessageToReceiver(Message message) {
+        // 构建 WebSocket 消息
+        com.im.websocket.WsMessage wsMessage = com.im.websocket.WsMessage.of(
+            com.im.websocket.WsMessageType.NEW_MESSAGE.getValue(),
+            message,
+            message.getFromId()
+        );
+
+        // 单聊：发送给接收方
+        if (message.getToId() != null) {
+            webSocketHandler.sendMessage(message.getToId(), wsMessage);
+        }
+
+        // 群聊：发送给所有群成员（排除发送者）
+        if (message.getGroupId() != null) {
+            // TODO: 获取群成员列表并群发
+            log.info("群消息推送：groupId={}, 需要获取群成员列表", message.getGroupId());
+        }
     }
 
     @Override
