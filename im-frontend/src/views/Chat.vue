@@ -245,6 +245,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import wsManager, { WsMessageType } from '@/utils/websocket'
 import {
   Search, Phone, VideoCamera, InfoFilled, Picture, Document,
   Loading, CircleCheck, CircleClose, Close, SwitchButton
@@ -510,6 +511,8 @@ const logout = () => {
   window.location.href = '/login'
 }
 
+let wsMessageDisconnect = null
+
 onMounted(async () => {
   // 加载用户信息
   if (!userStore.userInfo) {
@@ -519,14 +522,71 @@ onMounted(async () => {
   // 加载通话记录
   await loadRecentCalls()
   
-  // TODO: 连接 WebSocket
+  // 初始化通话 store 的 WebSocket 监听
+  callStore.init()
+  
+  // 连接 WebSocket
+  wsManager.connect()
+  
+  // 监听新消息
+  wsMessageDisconnect = wsManager.on(WsMessageType.NEW_MESSAGE, handleNewMessage)
+  
+  // 监听通话相关事件
+  wsManager.on(WsMessageType.CALL_ANSWER, handleRemoteCallAnswer)
+  wsManager.on(WsMessageType.CALL_REJECT, handleRemoteCallReject)
+  wsManager.on(WsMessageType.CALL_END, handleRemoteCallEnd)
 })
 
 onUnmounted(() => {
-  // TODO: 断开 WebSocket
+  // 断开 WebSocket 监听
+  if (wsMessageDisconnect) {
+    wsMessageDisconnect()
+  }
+  
   // 清理通话状态
-  callStore.resetCallState()
+  callStore.destroy()
 })
+
+// 处理新消息
+function handleNewMessage(data) {
+  console.log('收到新消息:', data)
+  
+  // 如果是当前会话的消息，添加到列表
+  if (data.fromId === currentTargetId.value || data.toId === currentTargetId.value) {
+    messages.value.push({
+      id: data.id,
+      fromId: data.fromId,
+      senderName: data.fromId === userStore.userInfo?.id ? '我' : '对方',
+      content: data.content,
+      time: new Date(data.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      avatar: '/avatar/default.png',
+      type: data.type || 'TEXT',
+      isRead: true
+    })
+    scrollToBottom()
+  }
+}
+
+// 处理对方接听
+function handleRemoteCallAnswer(data) {
+  console.log('对方已接听:', data)
+  ElMessage.success('对方已接听')
+}
+
+// 处理对方拒接
+function handleRemoteCallReject(data) {
+  console.log('对方拒接:', data)
+  ElMessage.warning('对方拒接')
+  showCallModal.value = false
+}
+
+// 处理对方结束通话
+function handleRemoteCallEnd(data) {
+  console.log('对方结束通话:', data)
+  ElMessage.info(`通话结束，时长：${data.duration}秒`)
+  showCallModal.value = false
+  loadRecentCalls()
+}
 </script>
 
 <style scoped>

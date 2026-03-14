@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import callApi from '@/api/call'
 import { ElNotification } from 'element-plus'
+import wsManager, { WsMessageType } from '@/utils/websocket'
+import { useUserStore } from './user'
 
 export const useCallStore = defineStore('call', () => {
   // 通话状态
@@ -24,6 +26,17 @@ export const useCallStore = defineStore('call', () => {
   
   let durationTimer = null
   let callTimeout = null
+  let wsDisconnect = null
+
+  // 初始化 WebSocket 监听
+  function initWebSocketListener() {
+    if (wsDisconnect) {
+      wsDisconnect()
+    }
+
+    // 监听通话邀请
+    wsDisconnect = wsManager.on(WsMessageType.CALL_INVITE, handleIncomingCall)
+  }
 
   // 发起通话
   async function startCall(targetId, type = 'AUDIO', groupId = null) {
@@ -42,18 +55,36 @@ export const useCallStore = defineStore('call', () => {
       callStatus.value = 'calling'
       isCalling.value = true
       
-      // 调用后端 API
+      // 通过 WebSocket 发送通话邀请
+      const signalingData = {
+        callId,
+        receiverId: groupId ? null : targetId,
+        groupId: groupId || null,
+        type,
+        action: 'INVITE'
+      }
+      
+      wsManager.send(WsMessageType.CALL_INVITE, signalingData)
+      
+      // 同时调用 REST API 创建通话记录（保证可靠性）
       await callApi.startCall({
         callerId: userStore.userInfo?.id,
         receiverId: groupId ? null : targetId,
         groupId: groupId || null,
         type,
         callId
+      }).catch(err => {
+        console.warn('创建通话记录失败，但信令已发送:', err)
       })
       
       // 设置超时（60 秒无人接听）
       callTimeout = setTimeout(() => {
         if (callStatus.value === 'calling') {
+          // 发送取消信令
+          wsManager.send(WsMessageType.CALL_CANCEL, {
+            callId,
+            receiverId: targetId
+          })
           endCall()
           ElNotification.warning({
             title: '通话超时',
@@ -78,7 +109,16 @@ export const useCallStore = defineStore('call', () => {
     try {
       if (!currentCall.value?.callId) return
       
-      await callApi.answerCall(currentCall.value.callId)
+      // 发送接听信令
+      wsManager.send(WsMessageType.CALL_ANSWER, {
+        callId: currentCall.value.callId,
+        action: 'ANSWER'
+      })
+      
+      // 调用 REST API
+      await callApi.answerCall(currentCall.value.callId).catch(err => {
+        console.warn('更新通话状态失败:', err)
+      })
       
       callStatus.value = 'connected'
       isInCall.value = true
@@ -108,7 +148,16 @@ export const useCallStore = defineStore('call', () => {
     try {
       if (!currentCall.value?.callId) return
       
-      await callApi.rejectCall(currentCall.value.callId)
+      // 发送拒接信令
+      wsManager.send(WsMessageType.CALL_REJECT, {
+        callId: currentCall.value.callId,
+        action: 'REJECT'
+      })
+      
+      // 调用 REST API
+      await callApi.rejectCall(currentCall.value.callId).catch(err => {
+        console.warn('更新通话状态失败:', err)
+      })
       
       resetCallState()
       
@@ -127,7 +176,17 @@ export const useCallStore = defineStore('call', () => {
         return
       }
       
-      await callApi.endCall(currentCall.value.callId, duration.value)
+      // 发送结束信令
+      wsManager.send(WsMessageType.CALL_END, {
+        callId: currentCall.value.callId,
+        action: 'END',
+        duration: duration.value
+      })
+      
+      // 调用 REST API
+      await callApi.endCall(currentCall.value.callId, duration.value).catch(err => {
+        console.warn('更新通话状态失败:', err)
+      })
       
       // 释放媒体流
       releaseMediaStream()
@@ -199,6 +258,20 @@ export const useCallStore = defineStore('call', () => {
     duration.value = 0
   }
 
+  // 初始化（在应用启动时调用）
+  function init() {
+    initWebSocketListener()
+  }
+
+  // 销毁（在应用退出时调用）
+  function destroy() {
+    if (wsDisconnect) {
+      wsDisconnect()
+      wsDisconnect = null
+    }
+    releaseMediaStream()
+  }
+
   // 初始化媒体流
   async function initMediaStream() {
     try {
@@ -268,6 +341,8 @@ export const useCallStore = defineStore('call', () => {
     peerConnection,
     
     // 方法
+    init,
+    destroy,
     startCall,
     answerCall,
     rejectCall,
@@ -280,6 +355,3 @@ export const useCallStore = defineStore('call', () => {
     releaseMediaStream
   }
 })
-
-// 需要导入 useUserStore
-import { useUserStore } from './user'
