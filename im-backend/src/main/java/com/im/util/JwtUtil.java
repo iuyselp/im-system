@@ -137,4 +137,18 @@ public class JwtUtil {
             return true;
         }
     }
+
+    /**
+     * 获取 Token 过期时间（毫秒）
+     */
+    public Long getExpiration() {
+        return expiration;
+    }
+
+    /**
+     * 获取刷新 Token 过期时间（毫秒）
+     */
+    public Long getRefreshExpiration() {
+        return refreshExpiration;
+    }
 }

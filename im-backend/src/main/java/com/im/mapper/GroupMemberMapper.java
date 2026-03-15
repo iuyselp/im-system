@@ -5,6 +5,7 @@ import com.im.entity.GroupMember;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -37,4 +38,16 @@ public interface GroupMemberMapper extends BaseMapper<GroupMember> {
      */
     @Select("SELECT g.owner_id FROM im_group g WHERE g.id = #{groupId}")
     Long selectOwnerId(@Param("groupId") Long groupId);
+
+    /**
+     * 根据群组 ID 删除群成员（逻辑删除）
+     */
+    @Update("UPDATE im_group_member SET deleted = 1 WHERE group_id = #{groupId}")
+    int deleteByGroupId(@Param("groupId") Long groupId);
+
+    /**
+     * 根据群组和用户 ID 删除成员（逻辑删除）
+     */
+    @Update("UPDATE im_group_member SET deleted = 1 WHERE group_id = #{groupId} AND user_id = #{userId}")
+    int deleteByGroupAndUser(@Param("groupId") Long groupId, @Param("userId") Long userId);
 }

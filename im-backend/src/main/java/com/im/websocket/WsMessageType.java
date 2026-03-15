@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 /**
  * WebSocket 消息类型枚举
  */
-public enumWsMessageType {
+public enum WsMessageType {
     
     // 连接相关
     CONNECTED("CONNECTED"),           // 连接成功

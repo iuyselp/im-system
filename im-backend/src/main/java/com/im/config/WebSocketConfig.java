@@ -48,8 +48,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     /**
      * 注册 WebSocket 处理器
+     * 注意：WebSocketMessageBrokerConfigurer 不支持此方法，需要单独配置
+     * 这里保留方法但移除 @Override 注解
      */
-    @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(webSocketHandler, "/ws/text")
                 .addInterceptors(webSocketInterceptor)

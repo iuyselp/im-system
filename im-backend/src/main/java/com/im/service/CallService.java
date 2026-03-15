@@ -3,6 +3,7 @@ package com.im.service;
 import com.im.entity.CallRecord;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 通话服务接口
@@ -64,5 +65,5 @@ public interface CallService {
      * 
      * @return ICE 服务器配置
      */
-    Object getWebRTCConfig();
+    Map<String, Object> getWebRTCConfig();
 }

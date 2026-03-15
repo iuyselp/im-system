@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.util.List;
+
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -61,7 +63,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
             log.info("WebSocket 连接建立：userId={}, sessionId={}", userId, session.getId());
 
             // 发送欢迎消息
-            sendMessage(userId, new WebSocketMessage("CONNECTED", "连接成功"));
+            sendMessage(userId, "CONNECTED", "连接成功");
         }
     }
 
@@ -84,7 +86,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
             switch (type) {
                 case "PING":
                     // 心跳响应
-                    sendMessage(userId, new WebSocketMessage("PONG", null));
+                    sendMessage(userId, "PONG", null);
                     break;
                 case "ACK":
                     // 消息确认
@@ -133,7 +135,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     /**
      * 发送消息给用户
      */
-    public void sendMessage(Long userId, WebSocketMessage message) {
+    public void sendMessage(Long userId, WsMessage message) {
         WebSocketSession session = ONLINE_SESSIONS.get(userId);
         
         if (session != null && session.isOpen()) {
@@ -153,9 +155,17 @@ public class WebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
+     * 发送简单消息给用户（兼容旧代码）
+     */
+    public void sendMessage(Long userId, String type, Object data) {
+        WsMessage message = WsMessage.of(type, data);
+        sendMessage(userId, message);
+    }
+
+    /**
      * 广播消息给多个用户
      */
-    public void broadcastMessage(java.util.Collection<Long> userIds, WebSocketMessage message) {
+    public void broadcastMessage(java.util.Collection<Long> userIds, WsMessage message) {
         for (Long userId : userIds) {
             sendMessage(userId, message);
         }
@@ -164,7 +174,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     /**
      * 发送消息给群组
      */
-    public void sendToGroup(java.util.Collection<Long> memberIds, WebSocketMessage message) {
+    public void sendToGroup(java.util.Collection<Long> memberIds, WsMessage message) {
         for (Long memberId : memberIds) {
             sendMessage(memberId, message);
         }
@@ -222,7 +232,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     /**
      * 存储离线消息
      */
-    private void storeOfflineMessage(Long userId, WebSocketMessage message) {
+    private void storeOfflineMessage(Long userId, WsMessage message) {
         String key = Constants.REDIS_KEY_MSG_OFFLINE + userId;
         try {
             String json = objectMapper.writeValueAsString(message);
@@ -232,16 +242,5 @@ public class WebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("存储离线消息失败", e);
         }
-    }
-
-    /**
-     * WebSocket 消息结构
-     */
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    public static class WebSocketMessage {
-        private String type;
-        private Object data;
-        private Long timestamp = System.currentTimeMillis();
     }
 }

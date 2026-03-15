@@ -2,6 +2,7 @@ package com.im.service.impl;
 
 import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.im.constant.Constants;
@@ -11,6 +12,7 @@ import com.im.exception.BusinessException;
 import com.im.mapper.MessageMapper;
 import com.im.result.Result;
 import com.im.service.MessageService;
+import com.im.websocket.WsMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
