@@ -57,7 +57,7 @@
               <el-icon><VideoCamera /></el-icon>
             </el-button>
             <el-button type="danger" circle size="large" @click="endCall">
-              <el-icon><PhoneClosed /></el-icon>
+              <el-icon><PhoneFilled /></el-icon>
             </el-button>
           </div>
         </div>
@@ -77,7 +77,7 @@
           </div>
           <div class="call-buttons">
             <el-button type="danger" size="large" circle @click="endCall">
-              <el-icon><PhoneClosed /></el-icon>
+              <el-icon><PhoneFilled /></el-icon>
             </el-button>
           </div>
         </div>
@@ -96,7 +96,7 @@
               <el-icon><Phone /></el-icon>
             </el-button>
             <el-button type="danger" size="large" circle @click="rejectCall">
-              <el-icon><PhoneClosed /></el-icon>
+              <el-icon><PhoneFilled /></el-icon>
             </el-button>
           </div>
         </div>
@@ -128,7 +128,7 @@
               <el-icon><VideoCamera /></el-icon>
             </el-button>
             <el-button type="danger" circle size="large" @click="endCall">
-              <el-icon><PhoneClosed /></el-icon>
+              <el-icon><PhoneFilled /></el-icon>
             </el-button>
           </div>
         </div>
@@ -139,7 +139,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { Phone, PhoneClosed, Microphone, VideoCamera, Loading } from '@element-plus/icons-vue'
+import { Phone, PhoneFilled, Microphone, VideoCamera, Loading } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import callApi from '@/api/call'
 import webrtc from '@/utils/webrtc'

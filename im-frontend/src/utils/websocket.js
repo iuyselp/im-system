@@ -1,5 +1,3 @@
-import { useUserStore } from '@/store/user'
-
 /**
  * WebSocket 消息类型
  */
@@ -58,6 +56,8 @@ class WebSocketManager {
    * 连接 WebSocket
    */
   connect() {
+    // 延迟导入，避免循环依赖
+    const { useUserStore } = require('@/store/user')
     const userStore = useUserStore()
     const token = userStore.token
     
